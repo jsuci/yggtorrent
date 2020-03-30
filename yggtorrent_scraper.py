@@ -1,191 +1,192 @@
-"""
-Program Flow:
-1. Get all the links including new ones and export them into json file
-"""
-
-
-from cfscrape import create_scraper, urlparse
+from cfscrape import create_scraper
 from fake_useragent import UserAgent
-from urllib.parse import parse_qs
 from bs4 import BeautifulSoup as BS
+from urllib.parse import urlparse, parse_qs, urlencode
 from time import sleep
-from json import dump, load
-from tqdm import tqdm
 from pathlib import Path
+from json import load, dump
+from tqdm import tqdm
 
 
-class MyURL():
-    def __init__(self, url):
-        self.p = urlparse(url)
+class ParseURL():
+    def __init__(self, url_str):
+        self.parse = urlparse(url_str)
 
-        self.full_url = self.p.geturl()
-        self.hostname = self.p.hostname
-        self.query = self.p.query
-        self.path = self.p.path
+        self.domain = self.parse.hostname
+        self.url = self.parse.geturl()
+        self.query = self.parse.query
 
-        if "page" in parse_qs(self.p.query).keys():
-            self.page = parse_qs(self.p.query)["page"][0]
+        self.qs = parse_qs(self.query, keep_blank_values=True)
+
+    def fname(self):
+        if "page" in self.qs.keys():
+            if len(self.qs["page"]) == 0:
+                page = 0
+            else:
+                page = self.qs["page"][0]
         else:
-            self.page = 0
+            page = 0
 
-        self.hpath = Path(f"{self.hostname}_page_{self.page}")
+        return f"{self.domain}_{page}"
 
-    # _replace accepts arguments in a form key=value
-    # **kwargs handles key=value as is
+    def replace_qs(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in self.qs.keys():
+                self.qs[k] = v
+            else:
+                print("Key not found.")
 
-    def replace(self, **kwargs):
-        self.p = self.p._replace(**kwargs)
+        self.query = urlencode(self.qs, doseq=True)
+        self.parse = self.parse._replace(query=self.query)
+        self.url = self.parse.geturl()
 
-        return MyURL(self.p.geturl())
-
-
-def save_html(html, fname):
-    with open(fname, "wb") as f:
-        f.write(html)
-
-
-def open_html(fname):
-    with open(fname, "rb") as f:
-        return f.read()
+        return ParseURL(self.url)
 
 
-def get_page(url, fname, save=True):
-    ua = UserAgent()
-    headers = {
-        "User-Agent": ua.random
-    }
-    fpath = Path(fname)
+def process_entries(entries, index_url_str):
+    p = ParseURL(index_url_str)
+    data_path = Path(p.domain + ".json")
+    data = []
 
-    if fpath.exists():
-        doc = open_html(fname)
+    if len(p.qs["page"][0]) == 0:
+        page = 0
     else:
-        cf = create_scraper()
-        r = cf.get(url, headers=headers)
-        doc = r.content
+        page = p.qs["page"][0]
 
-        if save:
-            save_html(r.content, fname)
+    print(f"Processing page {page}")
 
-    return doc
+    if data_path.exists():
+        print("Reading exisitng data.")
 
+        with open(data_path, "r", encoding="utf-8") as fi:
+            try:
+                data = load(fi)
+            except Exception:
+                data = []
 
-def clean_data(data):
-    d_set = set(tuple(d.items()) for d in data)
-    new_data = [{k: v for k, v in t} for t in d_set]
+    for e in tqdm(entries):
+        d = dict()
 
-    return new_data
+        name = e.select_one("#torrent_name").text.strip()
+        name = "".join([x for x in name if x not in "\\/?><|\":?%*"])
+        size = e.select_one("td:nth-of-type(6)").text.strip()
+        link = e.select_one("a[id=torrent_name]")["href"]
+        comments = e.select_one("td:nth-of-type(4)").text.strip()
+        category = e.select_one("td:nth-of-type(1)").text.strip()
 
-
-def parse_entries(entries, page_url, data):
-
-    t_path = page_url.path
-    t_query = page_url.query
-    page = page_url.page
-
-    for entry in entries:
-        d = {}
-
-        rel_link = entry.select_one("a[id=torrent_name]")["href"]
-        post_url = page_url.replace(path=rel_link, query="")
-        name = entry.select_one("a[id=torrent_name]").text.strip()
-
-        if len(name) >= 70:
-            name = name[:71]
-
-        safe_name = "".join([x for x in name if x not in "\\/?><|\":?%*"])
-        size = entry.select_one("td:nth-of-type(6)").text.strip()
-        cat = entry.select_one("td:nth-of-type(1)").text.strip()
-        comments = entry.select_one("td:nth-of-type(4)").text.strip()
-
-        if cat == "2173":
+        if category == "2173":
             category = "windows"
-        elif cat == "2172":
+        elif category == "2172":
             category = "macos"
-        elif cat == "2174":
+        elif category == "2174":
             category = "mobile"
-        elif cat == "2176":
+        elif category == "2176":
             category = "tutorials"
         else:
             category = "others"
 
-        d["url"] = post_url.full_url
-        d["name"] = f"{safe_name}_{size}"
+        if len(name) > 70:
+            name = name[:71] + f"_{size}"
+        else:
+            name = name + f"_{size}"
+
+        d["name"] = name
+        d["link"] = link
         d["size"] = size
-        d["cat"] = category
-        d["comment"] = comments
+        d["comments"] = comments
+        d["catergory"] = category
         d["page"] = page
 
-        data.append(d)
-        new_data = clean_data(data)
+        e_path = Path(name)
 
-        with open(f"{page_url.hostname}_posts.json", "w") as fo:
-            dump(new_data, fo, ensure_ascii=False)
+        if d in data or e_path.exists():
+            if d not in data:
+                # print("Adding entry.")
+                data.append(d)
+                with open(data_path, "w", encoding="utf-8") as fo:
+                    dump(data, fo, ensure_ascii=False)
+            else:
+                # print("Entry exists.")
+                pass
 
-        get_page(d["url"], d["name"], save=True)
+            if not e_path.exists():
+                # print("Exporting page.")
+                get_page(link, name)
+            else:
+                # print("Page exists.")
+                pass
+        else:
+            # print("Adding entry.")
+            data.append(d)
+            with open(data_path, "w", encoding="utf-8") as fo:
+                dump(data, fo, ensure_ascii=False)
 
-        sleep(5)
+            # print("Exporting page.")
+            get_page(link, name)
 
-    page_url = page_url.replace(path=t_path, query=t_query)
+        sleep(3)
 
-    return data
 
-    print(f"{page_url.full_url}")
-    sleep(10)
+def next_page(url_str):
+
+    p = ParseURL(url_str)
+    p = p.replace_qs(attempt=1)
+
+    doc = get_page(p.url, p.fname())
+
+    # Parsing index
+    html = BS(doc, "html.parser")
+    rel_obj = html.select("a[rel=next]")
+
+    if len(rel_obj) != 0:
+        rel_next_url = rel_obj[0].get("href")
+        return (html, rel_next_url)
+    else:
+        return None
+
+
+def get_page(url_str, name_str):
+    f_name = Path(name_str)
+
+    if f_name.exists():
+        with open(f_name, "rb") as f:
+            doc = f.read()
+
+    if not f_name.exists() or len(doc) == 0:
+        ua = UserAgent()
+        cf = create_scraper()
+        headers = {"User-Agent": ua.random}
+        r = cf.get(url_str, headers=headers)
+
+        doc = r.content
+
+        with open(f_name, "wb") as f:
+            f.write(doc)
+
+    return doc
 
 
 def get_posts():
 
-    home_url = ("https://www2.yggtorrent.me/engine/search?"
-                "name=&description=&file=&uploader=&category=2144"
-                "&sub_category=all&do=search&attempt=1")
+    # Fetch index
+    # index = ("https://www2.yggtorrent.se/engine/search?"
+    #          "name=&description=&file=&uploader=&category=2144"
+    #          "&sub_category=all&do=search&attempt=1&page=200")
 
-    url = MyURL(home_url)
-    hpath = url.hpath
-    data_path = Path(f"{url.hostname}_posts.json")
-
-    try:
-        doc = get_page(url.full_url, hpath, save=True)
-    except Exception as e:
-        with open("error.log", "a") as f:
-            f.write(f"{e}\n")
-
-    html = BS(doc, "html.parser")
-    next_page = html.find_all("a", string="suivante →", limit=1)
-    page_count = 1
-    pbar = tqdm(total=200)
-    data = []
-
-    if data_path.exists():
-        with open(data_path, "r") as fd:
-            data = clean_data(load(fd))
+    index = input("Enter index / page url: ")
+    html_index, rel_next = next_page(index)
 
     try:
-        while next_page:
+        while rel_next:
 
-            # Parsing current page html
-            entries = html.select(".results > table > tbody > tr")
-            parse_entries(entries, url, data)
+            entry_index = html_index.select(".results > table > tbody > tr")
+            process_entries(entry_index, index)
 
-            # Fetching next page html
-            rel_next = min(next_page).get("href")
-            rel_next = MyURL(rel_next).query
-            url_next = url.replace(query=rel_next)
-            url = url_next
-            hpath = url.hpath
-
-            doc = get_page(url.full_url, hpath, save=True)
-            html = BS(doc, "html.parser")
-            next_page = html.find_all("a", string="suivante →", limit=1)
-
-            pbar.update(page_count)
-            page_count += 1
-            sleep(10)
-
+            index = rel_next
+            html_index, rel_next = next_page(index)
     except Exception as e:
-        with open("error.log", "a") as f:
-            f.write(f"{e}\n")
-
-    pbar.close()
+        with open("error.log", "w") as f:
+            f.write(f"{e}\n{index}")
 
 
 def main():
