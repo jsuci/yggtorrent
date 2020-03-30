@@ -1,4 +1,6 @@
-from cfscrape import create_scraper
+from cfscrape import create_scraper, Session
+from cfscrape import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup as BS
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -53,10 +55,10 @@ def process_entries(entries, index_url_str):
     else:
         page = p.qs["page"][0]
 
-    print(f"Processing page {page}")
+    # print(f"Processing page {page}")
 
     if data_path.exists():
-        print("Reading exisitng data.")
+        # print("Reading exisitng data.")
 
         with open(data_path, "r", encoding="utf-8") as fi:
             try:
@@ -124,7 +126,7 @@ def process_entries(entries, index_url_str):
             # print("Exporting page.")
             get_page(link, name)
 
-        sleep(3)
+        sleep(5)
 
 
 def next_page(url_str):
@@ -146,6 +148,8 @@ def next_page(url_str):
 
 
 def get_page(url_str, name_str):
+
+    u = ParseURL(url_str)
     f_name = Path(name_str)
 
     if f_name.exists():
@@ -154,8 +158,10 @@ def get_page(url_str, name_str):
 
     if not f_name.exists() or len(doc) == 0:
         ua = UserAgent()
-        cf = create_scraper()
+        cf = Session()
+        retries = Retry(total=5, backoff_factor=1)
         headers = {"User-Agent": ua.random}
+        cf.mount(u.parse.scheme, HTTPAdapter(max_retries=retries))
         r = cf.get(url_str, headers=headers)
 
         doc = r.content
