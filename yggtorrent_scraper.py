@@ -8,6 +8,8 @@ from time import sleep
 from pathlib import Path
 from json import load, dump
 from tqdm import tqdm
+from sys import exit
+from atexit import register
 
 
 class ParseURL():
@@ -174,29 +176,38 @@ def next_page(url_str):
 
 
 def get_posts():
-    f_path = Path("error.log")
-
-    if f_path.exists():
-        with open(f_path, "r", encoding="utf-8") as fi:
-            for entry in fi:
-                if "://" in entry:
-                    index = entry.strip()
-                    print(f"Processing {index}")
-    else:
-        index = input("Enter index / page url: ")
-
-    html_index, rel_next = next_page(index)
-
     try:
+
+        def export_log():
+            with open(f_path, "w") as f:
+                f.write(f"{index}\n")
+
+            get_posts()
+
+        f_path = Path("page.log")
+
+        if f_path.exists():
+            with open(f_path, "r", encoding="utf-8") as fi:
+                for entry in fi:
+                    if "://" in entry:
+                        index = entry.strip()
+                        print(f"Processing {index}")
+        else:
+            index = input("Enter index / page url: ")
+
+        register(export_log)
+
+        html_index, rel_next = next_page(index)
+
         while rel_next:
             entry_index = html_index.select(".results > table > tbody > tr")
             process_entries(entry_index, index)
 
             index = rel_next
             html_index, rel_next = next_page(index)
-    except Exception as e:
-        with open("error.log", "w") as f:
-            f.write(f"{e}\n{index}")
+
+    except Exception:
+        exit(0)
 
 
 def main():
