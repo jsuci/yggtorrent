@@ -186,13 +186,16 @@ def get_posts():
             for entry in fi:
                 if "://" in entry:
                     index = entry.strip()
-                    print(f"Processing {index}")
+                    print(f"Processing {index[-10:]}\n")
     else:
         index = input("Enter index / page url: ")
 
     html_index, rel_next = next_page(index)
 
     while rel_next:
+        with open(f_path, "w") as fo:
+            fo.write(f"{index}\n")
+
         entry_index = html_index.select(".results > table > tbody > tr")
         process_entries(entry_index, index)
 
@@ -206,7 +209,7 @@ def main():
     else:
         ret = int(argv[1])
 
-    if ret < 2:
+    if ret < 3:
         try:
             get_posts()
         except Exception:
