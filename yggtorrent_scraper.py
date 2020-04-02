@@ -8,8 +8,10 @@ from time import sleep
 from pathlib import Path
 from json import load, dump
 from tqdm import tqdm
-from sys import exit
-from atexit import register
+from os import system
+from sys import argv
+# from sys import exit
+# from atexit import register
 
 
 class ParseURL():
@@ -176,42 +178,42 @@ def next_page(url_str):
 
 
 def get_posts():
-    try:
 
-        def export_log():
-            with open(f_path, "w") as f:
-                f.write(f"{index}\n")
+    f_path = Path("page.log")
 
-            get_posts()
+    if f_path.exists():
+        with open(f_path, "r", encoding="utf-8") as fi:
+            for entry in fi:
+                if "://" in entry:
+                    index = entry.strip()
+                    print(f"Processing {index}")
+    else:
+        index = input("Enter index / page url: ")
 
-        f_path = Path("page.log")
+    html_index, rel_next = next_page(index)
 
-        if f_path.exists():
-            with open(f_path, "r", encoding="utf-8") as fi:
-                for entry in fi:
-                    if "://" in entry:
-                        index = entry.strip()
-                        print(f"Processing {index}")
-        else:
-            index = input("Enter index / page url: ")
+    while rel_next:
+        entry_index = html_index.select(".results > table > tbody > tr")
+        process_entries(entry_index, index)
 
-        register(export_log)
-
+        index = rel_next
         html_index, rel_next = next_page(index)
-
-        while rel_next:
-            entry_index = html_index.select(".results > table > tbody > tr")
-            process_entries(entry_index, index)
-
-            index = rel_next
-            html_index, rel_next = next_page(index)
-
-    except Exception:
-        exit(0)
 
 
 def main():
-    get_posts()
+    if len(argv) == 1:
+        ret = 0
+    else:
+        ret = int(argv[1])
+
+    if ret < 2:
+        try:
+            get_posts()
+        except Exception:
+            ret += 1
+            system(f"python yggtorrent_scraper.py {ret}")
+    else:
+        return None
 
 
 if __name__ == "__main__":
