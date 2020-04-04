@@ -10,8 +10,6 @@ from json import load, dump
 from tqdm import tqdm
 from os import system
 from sys import argv
-# from sys import exit
-# from atexit import register
 
 
 class ParseURL():
@@ -49,8 +47,21 @@ class ParseURL():
         return ParseURL(self.url)
 
 
-def process_entries(entries, index_url_str):
-    p = ParseURL(index_url_str)
+def clean_data(data):
+    names = [x["name"] for x in data]
+
+    for d in data:
+        count = names.count(d["name"])
+
+        if count == 2:
+            names.remove(d["name"])
+            data.remove(d)
+
+    return (names, data)
+
+
+def process_entries(entries, prev_rel_str):
+    p = ParseURL(prev_rel_str)
     data_path = Path(p.domain + ".json")
     data = []
     sleep_time = 10
@@ -60,18 +71,18 @@ def process_entries(entries, index_url_str):
     else:
         page = p.qs["page"][0]
 
-    # print(f"Processing page {page}")
-
     if data_path.exists():
-        # print("Reading exisitng data.")
-
         with open(data_path, "r", encoding="utf-8") as fi:
             try:
                 data = load(fi)
             except Exception:
                 data = []
 
-    names = [x["name"] for x in data]
+    names, data = clean_data(data)
+
+    print(f"\nProcessing page={page}")
+    with open("path.log", "w", encoding="utf-8") as fo:
+        fo.write(prev_rel_str)
 
     for e in tqdm(entries):
         d = dict()
@@ -108,8 +119,8 @@ def process_entries(entries, index_url_str):
 
         e_path = Path(name)
 
-        if d["name"] in names or e_path.exists():
-            if d["name"] not in names:
+        if names.count(d["name"]) == 1 or e_path.exists():
+            if names.count(d["name"]) == 0:
                 # print("Adding entry.")
                 data.append(d)
                 with open(data_path, "w", encoding="utf-8") as fo:
@@ -141,8 +152,7 @@ def get_page(url_str, name_str):
     if f_name.exists():
         with open(f_name, "rb") as f:
             doc = f.read()
-
-    if not f_name.exists() or len(doc) == 0:
+    else:
         ua = UserAgent()
         cf = Session()
         retries = Retry(total=10, backoff_factor=1)
@@ -151,10 +161,13 @@ def get_page(url_str, name_str):
         cfs = create_scraper(sess=cf)
         r = cfs.get(url_str, headers=headers)
 
-        doc = r.content
+        if r.status_code == 200 and len(r.content) > 15000:
+            doc = r.content
 
-        with open(f_name, "wb") as f:
-            f.write(doc)
+            with open(f_name, "wb") as f:
+                f.write(doc)
+        else:
+            return None
 
     return doc
 
@@ -165,20 +178,22 @@ def next_page(url_str):
     p = p.replace_qs(attempt=1)
 
     doc = get_page(p.url, p.fname())
+    html = ""
 
     # Parsing index
-    html = BS(doc, "html.parser")
-    rel_obj = html.select("a[rel=next]")
+    if doc:
+        html = BS(doc, "html.parser")
+        rel_obj = html.select_one("a[rel=next]")
 
-    if len(rel_obj) != 0:
-        rel_next_url = rel_obj[0].get("href")
-        return (html, rel_next_url)
-    else:
-        return (None, None)
+        if rel_obj:
+            rel_next_url = rel_obj[0].get("href")
+        else:
+            rel_next_url = None
+
+    return (html, rel_next_url)
 
 
-def get_posts():
-
+def get_index():
     f_path = Path("page.log")
 
     if f_path.exists():
@@ -186,21 +201,23 @@ def get_posts():
             for entry in fi:
                 if "://" in entry:
                     index = entry.strip()
-                    print(f"Processing {index[-10:]}\n")
     else:
         index = input("Enter index / page url: ")
 
-    html_index, rel_next = next_page(index)
+    return index
 
-    while rel_next:
-        with open(f_path, "w") as fo:
-            fo.write(f"{index}\n")
 
+def get_posts():
+
+    prev_rel = get_index()
+    next_rel = prev_rel
+
+    while next_rel:
+        html_index, next_rel = next_page(prev_rel)
         entry_index = html_index.select(".results > table > tbody > tr")
-        process_entries(entry_index, index)
+        process_entries(entry_index, prev_rel)
 
-        index = rel_next
-        html_index, rel_next = next_page(index)
+        prev_rel = next_rel
 
 
 def main():
@@ -209,14 +226,12 @@ def main():
     else:
         ret = int(argv[1])
 
-    if ret < 3:
+    while ret < 3:
+        ret += 1
         try:
             get_posts()
         except Exception:
-            ret += 1
             system(f"python yggtorrent_scraper.py {ret}")
-    else:
-        return None
 
 
 if __name__ == "__main__":
