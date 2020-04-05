@@ -10,6 +10,7 @@ from json import load, dump
 from tqdm import tqdm
 from os import system
 from sys import argv
+from datetime import datetime
 
 
 class ParseURL():
@@ -66,7 +67,7 @@ def process_entries(entries, prev_rel_str):
     data = []
     sleep_time = 10
 
-    if len(p.qs["page"][0]) == 0:
+    if "page" not in p.qs.keys():
         page = 0
     else:
         page = p.qs["page"][0]
@@ -81,8 +82,8 @@ def process_entries(entries, prev_rel_str):
     names, data = clean_data(data)
 
     print(f"\nProcessing page={page}")
-    with open("page.log", "w", encoding="utf-8") as fo:
-        fo.write(prev_rel_str)
+    # with open("page.log", "w", encoding="utf-8") as fo:
+    #     fo.write(prev_rel_str)
 
     for e in tqdm(entries):
         d = dict()
@@ -172,50 +173,19 @@ def get_page(url_str, name_str):
     return doc
 
 
-def next_page(url_str):
-
-    p = ParseURL(url_str)
-    p = p.replace_qs(attempt=1)
-
-    doc = get_page(p.url, p.fname())
-
-    # Parsing index
-    html = BS(doc, "html.parser")
-    rel_obj = html.select_one("a[rel=next]")
-
-    if rel_obj is not None:
-        rel_next_url = rel_obj.get("href")
-    else:
-        rel_next_url = None
-
-    return (html, rel_next_url)
-
-
-def get_index():
-    f_path = Path("page.log")
-
-    if f_path.exists():
-        with open(f_path, "r", encoding="utf-8") as fi:
-            for entry in fi:
-                if "://" in entry:
-                    index = entry.strip()
-    else:
-        index = input("Enter index / page url: ")
-
-    return index
-
-
 def get_posts():
+    now = datetime.now().strftime("%Y_%m_%d")
+    index = ("https://www2.yggtorrent.se/engine/search?name="
+             "&description=&file=&uploader=&category=2144"
+             "&sub_category=all&do=search")
 
-    prev_rel = get_index()
-    next_rel = prev_rel
+    p = ParseURL(index)
+    f_name = f"{p.fname()}_{now}"
 
-    while next_rel:
-        html, next_rel = next_page(prev_rel)
-        entry_index = html.select(".results > table > tbody > tr")
-        process_entries(entry_index, prev_rel)
-
-        prev_rel = next_rel
+    doc = get_page(index, f_name)
+    html = BS(doc, "html.parser")
+    entry_index = html.select(".results > table > tbody > tr")
+    process_entries(entry_index, index)
 
 
 def main():
@@ -228,8 +198,9 @@ def main():
         ret += 1
         try:
             get_posts()
-        except Exception:
-            system(f"python yggtorrent_scraper.py {ret}")
+        except Exception as e:
+            print(f"Error: {e}. Restarting script...")
+            system(f"python yggtorrent_scraper_new.py {ret}")
     else:
         return None
 
