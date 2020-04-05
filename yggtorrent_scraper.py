@@ -81,7 +81,7 @@ def process_entries(entries, prev_rel_str):
     names, data = clean_data(data)
 
     print(f"\nProcessing page={page}")
-    with open("path.log", "w", encoding="utf-8") as fo:
+    with open("page.log", "w", encoding="utf-8") as fo:
         fo.write(prev_rel_str)
 
     for e in tqdm(entries):
@@ -178,17 +178,15 @@ def next_page(url_str):
     p = p.replace_qs(attempt=1)
 
     doc = get_page(p.url, p.fname())
-    html = ""
 
     # Parsing index
-    if doc:
-        html = BS(doc, "html.parser")
-        rel_obj = html.select_one("a[rel=next]")
+    html = BS(doc, "html.parser")
+    rel_obj = html.select_one("a[rel=next]")
 
-        if rel_obj:
-            rel_next_url = rel_obj[0].get("href")
-        else:
-            rel_next_url = None
+    if rel_obj is not None:
+        rel_next_url = rel_obj.get("href")
+    else:
+        rel_next_url = None
 
     return (html, rel_next_url)
 
@@ -213,8 +211,8 @@ def get_posts():
     next_rel = prev_rel
 
     while next_rel:
-        html_index, next_rel = next_page(prev_rel)
-        entry_index = html_index.select(".results > table > tbody > tr")
+        html, next_rel = next_page(prev_rel)
+        entry_index = html.select(".results > table > tbody > tr")
         process_entries(entry_index, prev_rel)
 
         prev_rel = next_rel
@@ -226,12 +224,14 @@ def main():
     else:
         ret = int(argv[1])
 
-    while ret < 3:
+    if ret < 3:
         ret += 1
         try:
             get_posts()
         except Exception:
             system(f"python yggtorrent_scraper.py {ret}")
+    else:
+        return None
 
 
 if __name__ == "__main__":
