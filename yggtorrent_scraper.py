@@ -9,6 +9,7 @@ from os import system
 from sys import argv
 from random import randint
 from time import sleep
+from datetime import datetime
 
 
 class ParseURL():
@@ -141,9 +142,13 @@ def output_doc(url_str, name_str):
 
     def open_browser(url):
 
-        def check_element(driver):
+        def check_browser(driver):
             return driver.find_element_by_xpath(
-                "//*[contains(text(), 'Just a moment...')]")
+                "//span[@data-tranlsate='checking_browser']")
+
+        def check_html(driver):
+            return driver.find_element_by_xpath(
+                "//link")
 
         options = webdriver.ChromeOptions()
         options.add_argument("window-size=50,20")
@@ -152,7 +157,8 @@ def output_doc(url_str, name_str):
 
         d.get(url)
 
-        WebDriverWait(d, timeout=60).until_not(check_element)
+        WebDriverWait(d, timeout=60).until_not(check_browser)
+        WebDriverWait(d, timeout=60).until(check_html)
 
         doc = d.page_source
 
@@ -216,11 +222,12 @@ def get_all_posts():
 
 
 def get_current_post():
-    p = current_url()
+    p = current_url().replace_qs(page=0)
+    current_dt = datetime.now()
+    time_stamp = current_dt.strftime("%Y-%m-%dd-%H%M%S")
+    file_name = f"{p.domain}_{time_stamp}"
 
-    p = p.replace_qs(page=0)
-
-    html = output_doc(p.url, p.domain)
+    html = output_doc(p.url, file_name)
     entries = html.select(".results > table > tbody > tr")
     process_entries(entries, p)
 
@@ -240,7 +247,7 @@ def auto_start(opt):
                 get_current_post()
         except Exception as e:
             print(f"Error: {e}\nRestarting script...")
-            system(f"python yggtorrent_scraper_all.py {ret} {opt}")
+            system(f"python yggtorrent_scraper.py {ret} {opt}")
     else:
         return None
 
