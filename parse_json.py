@@ -4,7 +4,6 @@ from pathlib import Path
 from json import load, dumps
 from random import choice
 from requests_html import HTML
-from tqdm import tqdm
 
 
 def mk_rt_title(title):
@@ -184,32 +183,50 @@ def mk_content(name, mk_title, os, size):
     fmisc = compile(r"\/misc\/safe_redirect\?url=[a-zA-Z0-9=]+")
 
     r_content = html.xpath(
-        "//section/div[@class='default']")[0].html.replace("\n", "")
+        "//section/div[@class='default']")
 
-    r_content = r_content.replace("https://images.weserv.nl/?url=", "")
-    r_content = sub(fmisc, "#", r_content)
+    if len(r_content) != 0:
+        r_content = r_content[0].html.replace("\n", "")
+        r_content = r_content.replace("https://images.weserv.nl/?url=", "")
+        r_content = sub(fmisc, "#", r_content)
 
-    # Generate schema
-    dlink = dl_link(pname, size)
-    schema = table_schema(os, pname, size, dlink)
+        # Generate schema
+        dlink = dl_link(pname, size)
+        schema = table_schema(os, pname, size, dlink)
 
-    r_content = f"{r_content}<div style='text-align: center;'>{schema}</div>"
+        r_content = (f"{r_content}<div style='text-align: center;'>"
+                     f"{schema}</div>")
 
-    return r_content
+        return r_content
 
 
-def main():
-    f_json = Path("www2.yggtorrent.se.json")
-    f_csv = Path("post_content.csv")
+def pr_entry(data):
+    d = {}
+    f_pos_title = Path("pos_title.txt")
+    f_pos_num = Path("pos_num.txt")
+    f_post_content = Path("post_content.csv")
 
-    with open(f_json, "r", encoding="utf-8") as f:
-        data = load(f)
+    if f_pos_num.exists():
+        with open(f_pos_num, "r") as f:
+            pos = int(f.read())
+    else:
+        with open(f_pos_num, "w") as f:
+            f.write("0")
+        pos = 0
 
-    all_data = []
-    all_titles = []
+    if f_pos_title.exists():
+        with open(f_pos_title, "r") as f:
+            posted_titles = list(map(lambda x: x.strip(), f))
+    else:
+        with open(f_pos_title, "w") as f:
+            f.write("")
+        posted_titles = []
 
-    for e in tqdm(data):
-        d = {}
+    e = data[pos]
+
+    while True:
+        pos += 1
+        e = data[pos]
 
         if (
             e["catergory"] == "windows"
@@ -222,8 +239,7 @@ def main():
             rt_title = mk_rt_title(name)
 
             # Filter duplicates here
-            if rt_title not in all_titles:
-                all_titles.append(rt_title)
+            if rt_title not in posted_titles:
 
                 # For titles
                 mk_title = mk_kw_title(rt_title)
@@ -234,20 +250,38 @@ def main():
                 content = mk_content(name, mk_title, os, size)
                 d["content"] = content
 
-                all_data.append(d)
+                print(f"posting {rt_title}")
 
-    # with open("titles.txt", "w", encoding="utf-8") as f:
-    #     for d in all_data:
-    #         f.write(f"{d}\n")
+                # Update posted titles
+                with open(f_pos_title, "a", encoding="utf-8") as f:
+                    f.write(f"{rt_title}\n")
 
-    with open(f_csv, "w", encoding="utf-8", newline="") as f:
-        fieldnames = ["rt_title", "mk_title", "content"]
-        writer = DictWriter(f, delimiter="$", fieldnames=fieldnames)
+                # Export to csv
+                with open(f_post_content, "a", newline="",
+                          encoding="utf-8") as f:
+                    fieldnames = ["rt_title", "mk_title", "content"]
+                    writer = DictWriter(
+                        f, fieldnames=fieldnames, delimiter="$")
 
-        writer.writeheader()
+                    writer.writeheader()
+                    writer.writerow(d)
 
-        for d in all_data:
-            writer.writerow(d)
+                # Update posted number
+                with open(f_pos_num, "w") as f:
+                    pos += 1
+                    f.write(f"{pos}")
+
+                return d
+
+
+def main():
+    f_json = Path("www2.yggtorrent.se.json")
+    f_csv = Path("post_content.csv")
+
+    with open(f_json, "r", encoding="utf-8") as f:
+        data = load(f)
+
+    pr_entry(data)
 
 
 if __name__ == "__main__":
