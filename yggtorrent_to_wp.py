@@ -4,6 +4,8 @@ from pathlib import Path
 from json import load, dumps
 from random import choice
 from requests_html import HTML
+from requests import post
+from base64 import b64encode
 
 
 def mk_rt_title(title):
@@ -204,11 +206,15 @@ def pr_entry(data):
     d = {}
     f_pos_title = Path("pos_title.txt")
     f_pos_num = Path("pos_num.txt")
-    f_post_content = Path("post_content.csv")
 
     if f_pos_num.exists():
         with open(f_pos_num, "r") as f:
-            pos = int(f.read())
+            pos_str = f.read()
+
+            if pos_str == "":
+                pos = 0
+            else:
+                pos = int(pos_str)
     else:
         with open(f_pos_num, "w") as f:
             f.write("0")
@@ -237,9 +243,10 @@ def pr_entry(data):
             size = e["size"]
 
             rt_title = mk_rt_title(name)
+            rt_title_low = rt_title.lower()
 
             # Filter duplicates here
-            if rt_title not in posted_titles:
+            if rt_title_low not in posted_titles:
 
                 # For titles
                 mk_title = mk_kw_title(rt_title)
@@ -250,21 +257,11 @@ def pr_entry(data):
                 content = mk_content(name, mk_title, os, size)
                 d["content"] = content
 
-                print(f"posting {rt_title}")
+                # print(f"posting {rt_title}")
 
                 # Update posted titles
                 with open(f_pos_title, "a", encoding="utf-8") as f:
-                    f.write(f"{rt_title}\n")
-
-                # Export to csv
-                with open(f_post_content, "a", newline="",
-                          encoding="utf-8") as f:
-                    fieldnames = ["rt_title", "mk_title", "content"]
-                    writer = DictWriter(
-                        f, fieldnames=fieldnames, delimiter="$")
-
-                    writer.writeheader()
-                    writer.writerow(d)
+                    f.write(f"{rt_title_low}\n")
 
                 # Update posted number
                 with open(f_pos_num, "w") as f:
@@ -274,6 +271,36 @@ def pr_entry(data):
                 return d
 
 
+def post_wp(c):
+    f_post_content = Path("post_content.csv")
+    endpoint = "https://jaimelogiciel.com/wp-json/wp/v2/posts"
+    usr_pass = b"jaimelogiciel:rugbyel.traje@d3_bano"
+    token = b64encode(usr_pass).decode()
+    headers = {
+        "Authorization": f"Basic {token}"
+    }
+    params = {
+        "title": c["mk_title"],
+        "content": c["content"],
+        "status": "publish"
+    }
+
+    r = post(endpoint, headers=headers, json=params)
+
+    post_id = r.json()["id"]
+    c["post_id"] = post_id
+
+    # Export to csv
+    with open(f_post_content, "a+", newline="",
+              encoding="utf-8") as f:
+
+        fieldnames = ["rt_title", "mk_title", "content", "post_id"]
+        writer = DictWriter(
+            f, fieldnames=fieldnames, delimiter="$")
+
+        writer.writerow(c)
+
+
 def main():
     f_json = Path("www2.yggtorrent.se.json")
     f_csv = Path("post_content.csv")
@@ -281,7 +308,8 @@ def main():
     with open(f_json, "r", encoding="utf-8") as f:
         data = load(f)
 
-    pr_entry(data)
+    content = pr_entry(data)
+    post_wp(content)
 
 
 if __name__ == "__main__":
