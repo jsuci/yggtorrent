@@ -2,7 +2,7 @@ from re import compile, sub, I
 from csv import DictWriter
 from pathlib import Path
 from json import load, dumps
-from random import choice
+from random import choice, shuffle, sample
 from requests_html import HTML
 from requests import post
 from base64 import b64encode
@@ -31,7 +31,7 @@ def mk_rt_title(title):
     ftrim = compile(r"^\s|\s$")
 
     # removes extra characters
-    fchar = compile(r"\+|\,|-{2,}|\_")
+    fchar = compile(r"&|\+|\,|-{2,}|\_")
 
     # removes period in between words
     fdot1 = compile(r"(?<=[a-zA-Z. ])\.|^\.|\.$")
@@ -101,18 +101,26 @@ def mk_rt_title(title):
 
 def mk_kw_title(title):
     first = choice([
-        "crack", "multi-crack", "précracké", "pré cracké"])
+        "crack", "cracked", "précracké", "pré cracké", "full crack"])
     last = choice([
         "clé de produit", "clé activation",
-        "licence", "pré-activé", "keygen", "activator", "activated",
-        "patch", "français", "patch"])
+        "licence", "pré activé", "keygen", "activator",
+        "activated", "patch", "serial key"
+        "license key", "product key", "patched",
+        "active", "license", "serial"])
+
+    lang = choice(["fr", "french", "français"])
 
     if "crack" in title:
-        mk_title = f"{title} {last.title()}"
+        mk_list = [last, lang]
     else:
-        mk_title = f"{title} {first.title()} {last.title()}"
+        mk_list = [first, last, lang]
 
-    return mk_title
+    shuffle(mk_list)
+    mk_shuffle = " ".join(mk_list)
+    mk_kw_title = f"{title} {mk_shuffle.title()}"
+
+    return mk_kw_title
 
 
 def mk_content(name, mk_title, os, size):
@@ -129,7 +137,6 @@ def mk_content(name, mk_title, os, size):
 
     def table_schema(os, pname, size, dlink):
         rating_c = str(choice(range(470, 500)) / 100)
-        review_c = str(choice(range(1, 3)))
         fname = f"{pname}.rar".replace(" ", "_")
 
         schema = {
@@ -148,7 +155,7 @@ def mk_content(name, mk_title, os, size):
             "aggregateRating": {
                 "@type": "AggregateRating",
                 "ratingValue": rating_c,
-                "reviewCount": review_c
+                "reviewCount": "[reviews]"
             },
             "installUrl": dlink
         }
@@ -156,6 +163,7 @@ def mk_content(name, mk_title, os, size):
         schema = dumps(schema, ensure_ascii=False)
 
         html_schema = (
+            f"""<div style='text-align: center;'>"""
             f"""<script type='application/ld+json'>{schema}</script>"""
             f"""<div class='tg-wrap' style='display:inline-block;'>"""
             f"""<table class='tg'><tr>"""
@@ -164,16 +172,75 @@ def mk_content(name, mk_title, os, size):
             f"""<td class='tg-uzvj'>Taille du fichier : <br></td>"""
             f"""<td class='tg-9wq8'>{size}</td></tr><tr>"""
             f"""<td class='tg-uzvj'>Évaluation : <br></td>"""
-            f"""<td class='tg-9wq8'>{rating_c} / 5 ([reviews])"""
+            f"""<td class='tg-9wq8'>{rating_c} / 5 ([reviews] reviews)"""
             f"""</td></tr><tr><td class='tg-uzvj'>Plate-forme : <br></td>"""
             f"""<td class='tg-9wq8'>{os}</td></tr><tr>"""
             f"""<td class='tg-uzvj'>Télécharger : <br></td>"""
             f"""<td class='tg-9wq8'><a href='{dlink}' target='_blank'>"""
             f"""<u>{fname}</u></a>"""
-            f"""</td></tr></table></div>"""
+            f"""</td></tr></table></div></div>"""
         )
 
         return html_schema
+
+    def tags(name):
+        all_kw = [name]
+
+        k_one = ("""
+        pour le partage de cette version du logiciel
+        installation terminé activation ok tout est
+        parfait torrent de l'instalation de windows
+        taper ma clé d activation désinstallé le loader
+        l'installer et l'activer avec un serial valide
+        simple pour exécute premier boot après l'installation
+        lors ce que l'assistant d'installation vous demande
+        le nom d'utilisateur uploadeur fonctionne nickel et
+        très complet avec de nombreux paramètres cette nouvelle
+        version fonctionne très bien j'ai déjà téléchargé
+        quelques vidéos avec fonctionnel et activé version optimisée sur
+        lesquelles les logiciels standards de Microsoft et autres
+        fonctionnent parfaitement installé votre version des
+        performances avoir la version mac PC avec l'intégrité de la mémoire
+        activée à jour de Windows 10  j'ai installé toute tes versions
+        réinstaller toute les semaines activateurs générateur avec les
+        logiciels""").replace("\n", "").split(" ")
+
+        k_one = list(filter(lambda x: True if x else False, k_one))
+        shuffle(k_one)
+        all_kw.extend(sample(k_one, 20))
+
+        k_two = ("""
+        crack serial-key license license-key product product-key
+        activation patch générateur activator gratuit telecharger
+        full-version french francais fr complete multi language iso
+        rar torrent exe winrar piratebay yggtorrent chinglui 64bit 32bit
+        precrack cracked patched included with plus version installateur
+        licence activateur pièce en-série numéro-de-série langue product-key
+        logiciel extended nombre nouvelle-version code produit pour-mac
+        pour-windows la-version licence OEM pro-version professional
+        """).replace("\n", "").split(" ")
+
+        k_two = list(filter(lambda x: True if x else False, k_two))
+        k_two = list(map(lambda x: x.replace(
+            "-", " ") if "-" in x else x, k_two))
+        shuffle(k_two)
+        all_kw.extend(sample(k_two, 20))
+
+        k_three = ["crack", "serial key", "activated", "patch",
+                   "generator", "product key", "license key",
+                   "crack patch", "pre crack", "activated crack",
+                   "license number", "license code", "product number"
+                   "key generator"]
+        shuffle(k_three)
+        all_kw.extend(sample(k_three, 10))
+
+        shuffle(all_kw)
+
+        all_kw = " ".join(all_kw)
+
+        tags = f"<p>{all_kw}</p>"
+
+        return tags
 
     fpath = Path(name)
     pname = f"{mk_title}".title()
@@ -184,6 +251,12 @@ def mk_content(name, mk_title, os, size):
     # Remove /misc/safe_redirect
     fmisc = compile(r"\/misc\/safe_redirect\?url=[a-zA-Z0-9=]+")
 
+    # Remove repeating symbols
+    fsym = compile(r"[\*\-_— ]{10,}")
+
+    # Fix image tags
+    fimg = compile(r"(\[img.+\])(https:.+)(\[\/img\])")
+
     r_content = html.xpath(
         "//section/div[@class='default']")
 
@@ -191,13 +264,20 @@ def mk_content(name, mk_title, os, size):
         r_content = r_content[0].html.replace("\n", "")
         r_content = r_content.replace("https://images.weserv.nl/?url=", "")
         r_content = sub(fmisc, "#", r_content)
+        r_content = sub(fsym, "", r_content)
+
+        res = fimg.search(r_content)
+
+        if res:
+            r_content = r_content.replace(res[1], "<img src=\"")
+            r_content = r_content.replace(res[3], "\"/>")
 
         # Generate schema
         dlink = dl_link(pname, size)
         schema = table_schema(os, pname, size, dlink)
+        ctags = tags(pname)
 
-        r_content = (f"{r_content}<div style='text-align: center;'>"
-                     f"{schema}</div>")
+        r_content = f"{r_content}{schema}{ctags}"
 
         return r_content
 
@@ -288,7 +368,11 @@ def post_wp(c):
     r = post(endpoint, headers=headers, json=params)
 
     post_id = r.json()["id"]
+    post_title = r.json()["title"]["rendered"]
+
     c["post_id"] = post_id
+
+    print(f"{post_title} posted.")
 
     # Export to csv
     with open(f_post_content, "a+", newline="",
