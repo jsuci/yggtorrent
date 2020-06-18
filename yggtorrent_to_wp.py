@@ -6,6 +6,8 @@ from random import choice, shuffle, sample
 from requests_html import HTML
 from requests import post
 from base64 import b64encode
+from datetime import datetime
+from time import sleep
 
 
 def mk_rt_title(title):
@@ -172,7 +174,7 @@ def mk_content(name, mk_title, os, size):
             f"""<td class='tg-uzvj'>Taille du fichier : <br></td>"""
             f"""<td class='tg-9wq8'>{size}</td></tr><tr>"""
             f"""<td class='tg-uzvj'>Évaluation : <br></td>"""
-            f"""<td class='tg-9wq8'>{rating_c} / 5 ([reviews] reviews)"""
+            f"""<td class='tg-9wq8'>{rating_c} / 5 ([reviews] review(s))"""
             f"""</td></tr><tr><td class='tg-uzvj'>Plate-forme : <br></td>"""
             f"""<td class='tg-9wq8'>{os}</td></tr><tr>"""
             f"""<td class='tg-uzvj'>Télécharger : <br></td>"""
@@ -257,8 +259,11 @@ def mk_content(name, mk_title, os, size):
     # Fix image tags
     fimg = compile(r"(\[img.+\])(https:.+)(\[\/img\])")
 
+    # Geth the main content
     r_content = html.xpath(
         "//section/div[@class='default']")
+
+    r_comments = html.xpath("//div[@class='message']")
 
     if len(r_content) != 0:
         r_content = r_content[0].html.replace("\n", "")
@@ -277,9 +282,24 @@ def mk_content(name, mk_title, os, size):
         schema = table_schema(os, pname, size, dlink)
         ctags = tags(pname)
 
-        r_content = f"{r_content}{schema}{ctags}"
+        f_content = f"{r_content}{schema}{ctags}"
 
-        return r_content
+        # Generate comments
+        f_comments = []
+        for comment in r_comments:
+            comm = {}
+            comm_id = comment.xpath("//div[@class='message']/@id")[0]
+            comm_auth = comment.xpath("//a/text()")[0]
+            comm_msg = comment.xpath(
+                "//span[@id='comment_text']/text()")[0].strip()
+
+            comm["comm_id"] = comm_id
+            comm["comm_auth"] = comm_auth
+            comm["comm_msg"] = comm_msg
+
+            f_comments.append(comm)
+
+        return f_content, f_comments
 
 
 def pr_entry(data):
@@ -333,56 +353,105 @@ def pr_entry(data):
                 d["rt_title"] = rt_title
                 d["mk_title"] = mk_title
 
-                # For content
-                content = mk_content(name, mk_title, os, size)
+                # For content and comments
+                content, comments = mk_content(name, mk_title, os, size)
                 d["content"] = content
-
-                # print(f"posting {rt_title}")
-
-                # Update posted titles
-                with open(f_pos_title, "a", encoding="utf-8") as f:
-                    f.write(f"{rt_title_low}\n")
-
-                # Update posted number
-                with open(f_pos_num, "w") as f:
-                    pos += 1
-                    f.write(f"{pos}")
+                d["comments"] = comments
+                d["post_count"] = pos
 
                 return d
 
 
 def post_wp(c):
-    f_post_content = Path("post_content.csv")
-    endpoint = "https://jaimelogiciel.com/wp-json/wp/v2/posts"
+    f_post_content = Path("pos_content.csv")
+    f_post_comment = Path("pos_comm.txt")
+    f_pos_title = Path("pos_title.txt")
+    f_pos_num = Path("pos_num.txt")
+
+    # Login and authentication
     usr_pass = b"jaimelogiciel:rugbyel.traje@d3_bano"
     token = b64encode(usr_pass).decode()
     headers = {
         "Authorization": f"Basic {token}"
     }
+
+    # Post content
+    if f_post_comment.exists():
+        with open(f_post_comment, "r") as f:
+            comm_ids = list(map(lambda x: x.strip(), f))
+    else:
+        with open(f_post_comment, "w") as f:
+            f.write("")
+            comm_ids = []
+
+    post_endpoint = "https://jaimelogiciel.com/wp-json/wp/v2/posts"
     params = {
         "title": c["mk_title"],
         "content": c["content"],
         "status": "publish"
     }
-
-    r = post(endpoint, headers=headers, json=params)
-
-    post_id = r.json()["id"]
-    post_title = r.json()["title"]["rendered"]
+    post_r = post(post_endpoint, headers=headers, json=params)
+    post_id = post_r.json()["id"]
+    post_title = post_r.json()["title"]["rendered"]
 
     c["post_id"] = post_id
+    c["post_count"] += 1
 
-    print(f"{post_title} posted.")
+    # Post comments
+    comm_endpoint = "https://jaimelogiciel.com/wp-json/wp/v2/comments"
 
-    # Export to csv
+    if len(c["comments"]) >= 5:
+        samp_comments = sample(c["comments"], choice(range(3, 5)))
+    else:
+        samp_comments = c["comments"]
+
+    for e_comment in samp_comments:
+        comm_id = e_comment["comm_id"]
+
+        if comm_id not in comm_ids:
+            comm_auth = e_comment["comm_auth"]
+            comm_msg = e_comment["comm_msg"]
+
+            r_month = choice(range(1, 12))
+            r_day = choice(range(1, 30))
+            r_year = datetime.now().year - 1
+
+            comm_params = {
+                "author_name": comm_auth,
+                "author_email": f"{comm_auth}@gmail.com",
+                "content": comm_msg,
+                "status": "approve",
+                "date": f"{r_year}-{r_month:0>2}-{r_day:0>2}T10:00:00",
+                "post": post_id
+            }
+
+            post_comm = post(comm_endpoint, headers=headers, json=comm_params)
+
+            with open(f_post_comment, "a") as f:
+                f.write(f"{comm_id}\n")
+        else:
+            print(f"{comm_id} exits.")
+
+
+    # Export entries
     with open(f_post_content, "a+", newline="",
               encoding="utf-8") as f:
 
-        fieldnames = ["rt_title", "mk_title", "content", "post_id"]
+        fieldnames = ["rt_title", "mk_title",
+                      "content", "comments",
+                      "post_count", "post_id"]
         writer = DictWriter(
             f, fieldnames=fieldnames, delimiter="$")
 
         writer.writerow(c)
+
+    with open(f_pos_title, "a", encoding="utf-8") as f:
+        f.write(f"{c['rt_title'].lower()}\n")
+
+    with open(f_pos_num, "w") as f:
+        f.write(f"{c['post_count']}")
+
+    print(f"{post_title} posted.")
 
 
 def main():
