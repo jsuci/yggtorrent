@@ -432,7 +432,6 @@ def post_wp(c):
         else:
             print(f"{comm_id} exits.")
 
-
     # Export entries
     with open(f_post_content, "a+", newline="",
               encoding="utf-8") as f:
