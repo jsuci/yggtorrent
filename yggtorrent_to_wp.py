@@ -263,8 +263,6 @@ def mk_content(name, mk_title, os, size):
     r_content = html.xpath(
         "//section/div[@class='default']")
 
-    r_comments = html.xpath("//div[@class='message']")
-
     if len(r_content) != 0:
         r_content = r_content[0].html.replace("\n", "")
         r_content = r_content.replace("https://images.weserv.nl/?url=", "")
@@ -285,17 +283,23 @@ def mk_content(name, mk_title, os, size):
         f_content = f"{r_content}{schema}{ctags}"
 
         # Generate comments
+        r_comments = html.xpath("//li[@class='utilisateur']")
         f_comments = []
+
         for comment in r_comments:
             comm = {}
             comm_id = comment.xpath("//div[@class='message']/@id")[0]
-            comm_auth = comment.xpath("//a/text()")[0]
+            comm_auth = comment.xpath("//a/text()")[0].strip()
             comm_msg = comment.xpath(
-                "//span[@id='comment_text']/text()")[0].strip()
+                "//span[@id='comment_text']//text()")
+            comm_msg_all = "".join(comm_msg).strip()
 
             comm["comm_id"] = comm_id
             comm["comm_auth"] = comm_auth
-            comm["comm_msg"] = comm_msg
+            comm["comm_msg"] = comm_msg_all
+
+            # print(comm_msg_all)
+            # sleep(5)
 
             f_comments.append(comm)
 
@@ -424,6 +428,9 @@ def post_wp(c):
                 "date": f"{r_year}-{r_month:0>2}-{r_day:0>2}T10:00:00",
                 "post": post_id
             }
+
+            # print(comm_params)
+            # sleep(60)
 
             post_comm = post(comm_endpoint, headers=headers, json=comm_params)
 
