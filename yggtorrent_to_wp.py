@@ -7,7 +7,7 @@ from requests_html import HTML
 from requests import post
 from base64 import b64encode
 from datetime import datetime
-from time import sleep
+# from time import sleep
 
 
 def mk_rt_title(title):
@@ -244,11 +244,24 @@ def mk_content(name, mk_title, os, size):
 
         return tags
 
-    fpath = Path(name)
+    fpath = Path(f"pages/{name}")
     pname = f"{mk_title}".title()
 
+    # Get contents from local file
     with open(fpath, "r", encoding="utf-8", newline="") as f:
         html = HTML(html=f.read())
+
+    # Get contents from url
+    # loc = "https://jaimelogiciel.com/pages/"
+
+    # print("Fetching content.")
+    # rc = get(f"{loc}{name}")
+
+    # if rc.status_code == 200:
+    #     html = HTML(html=rc.text)
+    # else:
+    #     print("Error fetching content.")
+    #     return None, None
 
     # Remove /misc/safe_redirect
     fmisc = compile(r"\/misc\/safe_redirect\?url=[a-zA-Z0-9=]+")
@@ -287,21 +300,21 @@ def mk_content(name, mk_title, os, size):
         f_comments = []
 
         for comment in r_comments:
+
             comm = {}
-            comm_id = comment.xpath("//div[@class='message']/@id")[0]
-            comm_auth = comment.xpath("//a/text()")[0].strip()
-            comm_msg = comment.xpath(
-                "//span[@id='comment_text']//text()")
-            comm_msg_all = "".join(comm_msg).strip()
+            comm_id = comment.xpath("//li/@comment-id")
 
-            comm["comm_id"] = comm_id
-            comm["comm_auth"] = comm_auth
-            comm["comm_msg"] = comm_msg_all
+            if comm_id:
+                comm_auth = comment.xpath("//a/text()")[0].strip()
+                comm_msg = comment.xpath(
+                    "//span[@id='comment_text']//text()")
+                comm_msg_all = "".join(comm_msg).strip()
 
-            # print(comm_msg_all)
-            # sleep(5)
+                comm["comm_id"] = comm_id[0]
+                comm["comm_auth"] = comm_auth
+                comm["comm_msg"] = comm_msg_all
 
-            f_comments.append(comm)
+                f_comments.append(comm)
 
         return f_content, f_comments
 

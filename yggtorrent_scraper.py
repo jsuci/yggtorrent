@@ -166,7 +166,7 @@ def output_doc(url_str, name_str):
 
         return doc
 
-    f_name = Path(name_str)
+    f_name = Path(f"pages/{name_str}")
 
     if f_name.exists():
         with open(f_name, "r", encoding="utf-8") as f:
